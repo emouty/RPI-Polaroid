@@ -3,12 +3,11 @@ package polaroid;
 import java.io.File;
 import java.io.IOException;
 
-import com.pi4j.io.gpio.GpioController;
-import com.pi4j.io.gpio.GpioFactory;
-import com.pi4j.io.gpio.GpioPinDigitalInput;
-import com.pi4j.io.gpio.PinPullResistance;
-import com.pi4j.io.gpio.PinState;
-import com.pi4j.io.gpio.RaspiPin;
+import com.pi4j.Pi4J;
+import com.pi4j.context.Context;
+import com.pi4j.io.gpio.digital.DigitalInput;
+import com.pi4j.io.gpio.digital.DigitalState;
+import com.pi4j.io.gpio.digital.PullResistance;
 import uk.co.caprica.picam.Camera;
 import uk.co.caprica.picam.CameraException;
 import uk.co.caprica.picam.CaptureFailedException;
@@ -25,13 +24,13 @@ public class Main {
     private static long startShutdownTimer;
     private static boolean shutdownTimerStarted = false;
 
-
-
     public static void main(String[] args) throws NativeLibraryException, CameraException, CaptureFailedException {
-        // create gpio controller instance
-        final GpioController gpio = GpioFactory.getInstance();
-        GpioPinDigitalInput myButton = gpio.provisionDigitalInputPin(RaspiPin.GPIO_20,
-                "MyButton", PinPullResistance.PULL_UP);
+        final Context pi4j = Pi4J.newAutoContext();
+        DigitalInput myButton = pi4j.create(DigitalInput.newConfigBuilder(pi4j)
+                .id("my-button")
+                .name("MyButton").bcm(20)
+                .pull(PullResistance.PULL_UP)
+                .build());
 
         // installLibrary("");
         installTempLibrary();
@@ -40,9 +39,8 @@ public class Main {
         Camera camera = cameraHandler.getCamera();
         camera.takePicture(new FilePictureCaptureHandler(new File("picam-2.jpg")));
 
-
         while (true) {
-            if (myButton.isState(PinState.LOW) && !shutdownTimerStarted) {
+            if (myButton.state() == DigitalState.LOW && !shutdownTimerStarted) {
                 startShutdownTimer = System.currentTimeMillis();
                 shutdownTimerStarted = true;
             }
@@ -51,21 +49,21 @@ public class Main {
                 System.out.println("Shutting Down");
                 try {
                     shutdownPi();
-                } catch (IOException ex) {}
+                } catch (IOException ex) {
+                }
 
+                pi4j.shutdown();
                 System.exit(0);
 
             } else {
                 shutdownTimerStarted = false;
             }
-
-
         }
     }
 
     public static void shutdownPi() throws IOException {
-
-        Runtime.getRuntime().exec("sudo shutdown -h now");
+        // Prefer ProcessBuilder over deprecated Runtime.exec usage.
+        new ProcessBuilder("sudo", "shutdown", "-h", "now").start();
     }
 }
 
